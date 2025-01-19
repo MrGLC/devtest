@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Elevator System</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #dataDisplay {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Elevator System Dashboard</h1>
+    
+    <div class="form-group">
+        <h2>Record New Demand</h2>
+        <label for="calledFrom">Called From Floor:</label>
+        <input type="number" id="calledFrom" required>
+        
+        <label for="destination">Destination Floor:</label>
+        <input type="number" id="destination" required>
+        
+        <label for="resting">Current Resting Floor:</label>
+        <input type="number" id="resting" required>
+        
+        <button onclick="recordDemand()">Record Demand</button>
+    </div>
+
+    <div id="dataDisplay">
+        <h2>Historical Data</h2>
+        <button onclick="refreshData()">Refresh Data</button>
+        <div id="plot"></div>
+    </div>
+
+    <script>
+        async function recordDemand() {
+            const data = {
+                called_from_floor: parseInt(document.getElementById('calledFrom').value),
+                destination_floor: parseInt(document.getElementById('destination').value),
+                resting_floor: parseInt(document.getElementById('resting').value)
+            };
+
+            try {
+                const response = await fetch('/api/demand', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                if (response.ok) {
+                    alert('Demand recorded successfully');
+                    refreshData();
+                }
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        async function refreshData() {
+            try {
+                const response = await fetch('/api/demands');
+                const data = await response.json();
+                
+                // Create a scatter plot of demands
+                const hours = data.map(d => d.hour_of_day);
+                const calledFloors = data.map(d => d.called_from_floor);
+                
+                const trace = {
+                    x: hours,
+                    y: calledFloors,
+                    mode: 'markers',
+                    type: 'scatter',
+                    name: 'Demands',
+                    marker: { size: 10 }
+                };
+
+                const layout = {
+                    title: 'Elevator Demands by Hour',
+                    xaxis: { title: 'Hour of Day' },
+                    yaxis: { title: 'Called From Floor' }
+                };
+
+                Plotly.newPlot('plot', [trace], layout);
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        // Initial data load
+        refreshData();
+    </script>
+</body>
+</html> 

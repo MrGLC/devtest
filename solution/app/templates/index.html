@@ -43,14 +43,28 @@
     
     <div class="form-group">
         <h2>Record New Demand</h2>
+        
+        <!-- Time context -->
+        <label for="timestamp">Timestamp:</label>
+        <input type="datetime-local" id="timestamp" required>
+        
+        <!-- Passenger information -->
+        <label for="passengerCount">Number of Passengers:</label>
+        <input type="number" id="passengerCount" min="1" value="1" required>
+        
+        <!-- Floor occupancy context -->
+        <label for="floorOccupancy">Current Floor Occupancy:</label>
+        <input type="number" id="floorOccupancy" min="0" value="0" required>
+        
+        <!-- Existing fields -->
         <label for="calledFrom">Called From Floor:</label>
-        <input type="number" id="calledFrom" required>
+        <input type="number" id="calledFrom" min="0" max="4" required>
         
         <label for="destination">Destination Floor:</label>
-        <input type="number" id="destination" required>
+        <input type="number" id="destination" min="0" max="4" required>
         
         <label for="resting">Current Resting Floor:</label>
-        <input type="number" id="resting" required>
+        <input type="number" id="resting" min="0" max="4" required>
         
         <button onclick="recordDemand()">Record Demand</button>
     </div>
@@ -59,11 +73,20 @@
         <h2>Historical Data</h2>
         <button onclick="refreshData()">Refresh Data</button>
         <div id="plot"></div>
+        <div id="heatmap"></div>
+    </div>
+
+    <div id="successMetrics">
+        <h3>Resting Floor Success Rate</h3>
+        <p>Loading...</p>
     </div>
 
     <script>
         async function recordDemand() {
             const data = {
+                timestamp: document.getElementById('timestamp').value,
+                passenger_count: parseInt(document.getElementById('passengerCount').value),
+                floor_occupancy: parseInt(document.getElementById('floorOccupancy').value),
                 called_from_floor: parseInt(document.getElementById('calledFrom').value),
                 destination_floor: parseInt(document.getElementById('destination').value),
                 resting_floor: parseInt(document.getElementById('resting').value)
@@ -80,6 +103,8 @@
                 if (response.ok) {
                     alert('Demand recorded successfully');
                     refreshData();
+                    // Also refresh success metrics
+                    refreshSuccessMetrics();
                 }
             } catch (error) {
                 console.error('Error:', error);
@@ -88,29 +113,67 @@
 
         async function refreshData() {
             try {
-                const response = await fetch('/api/demands');
+                const [patternsResponse, occupancyResponse] = await Promise.all([
+                    fetch('/api/v1/analytics/patterns?building_id=1'),
+                    fetch('/api/v1/floor-occupancy?building_id=1')
+                ]);
+                
+                const patterns = await patternsResponse.json();
+                const occupancy = await occupancyResponse.json();
+                
+                // Create hourly pattern visualization
+                const hourlyData = Array(24).fill().map(() => ({calls: 0, occupancy: 0}));
+                patterns.forEach(p => {
+                    hourlyData[p.hour_of_day].calls = p.avg_calls_per_hour;
+                    hourlyData[p.hour_of_day].occupancy = p.avg_occupancy;
+                });
+                
+                // Calls per hour trace
+                const callsTrace = {
+                    x: Array.from({length: 24}, (_, i) => i),
+                    y: hourlyData.map(d => d.calls),
+                    type: 'bar',
+                    name: 'Avg Calls/Hour'
+                };
+                
+                // Occupancy trace
+                const occupancyTrace = {
+                    x: Array.from({length: 24}, (_, i) => i),
+                    y: hourlyData.map(d => d.occupancy),
+                    type: 'scatter',
+                    name: 'Avg Occupancy',
+                    yaxis: 'y2'
+                };
+                
+                const layout = {
+                    title: 'Daily Patterns',
+                    xaxis: { title: 'Hour of Day' },
+                    yaxis: { title: 'Avg Calls/Hour' },
+                    yaxis2: {
+                        title: 'Avg Occupancy',
+                        overlaying: 'y',
+                        side: 'right'
+                    },
+                    showlegend: true
+                };
+                
+                Plotly.newPlot('plot', [callsTrace, occupancyTrace], layout);
+                
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        async function refreshSuccessMetrics() {
+            try {
+                const response = await fetch('/api/v1/analytics/success-rate?elevator_id=1');
                 const data = await response.json();
                 
-                // Create a scatter plot of demands
-                const hours = data.map(d => d.hour_of_day);
-                const calledFloors = data.map(d => d.called_from_floor);
-                
-                const trace = {
-                    x: hours,
-                    y: calledFloors,
-                    mode: 'markers',
-                    type: 'scatter',
-                    name: 'Demands',
-                    marker: { size: 10 }
-                };
-
-                const layout = {
-                    title: 'Elevator Demands by Hour',
-                    xaxis: { title: 'Hour of Day' },
-                    yaxis: { title: 'Called From Floor' }
-                };
-
-                Plotly.newPlot('plot', [trace], layout);
+                const metricsDiv = document.getElementById('successMetrics');
+                metricsDiv.innerHTML = `
+                    <h3>Resting Floor Success Rate</h3>
+                    <p>${(data.success_rate * 100).toFixed(2)}% of resting positions matched next call</p>
+                `;
             } catch (error) {
                 console.error('Error:', error);
             }

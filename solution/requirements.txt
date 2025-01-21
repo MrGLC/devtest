@@ -6,4 +6,9 @@ torch
 pandas
 numpy
 plotly
-flask-migrate 
+flask-migrate
+jupyter 
+scikit-learn
+
+
+

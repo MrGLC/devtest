@@ -4,6 +4,8 @@ from datetime import datetime
 import os
 import time
 from sqlalchemy.exc import OperationalError
+from datetime import timedelta
+import random
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
@@ -226,8 +228,32 @@ def generate_mock_data():
                 called_from_floor=source_floor
             )
             db.session.add(resting)
+            
+            # Generate matching occupancy data
+            generate_occupancy_for_call(building.id, source_floor, call_time)
     
     db.session.commit()
+
+
+def generate_occupancy_for_call(building_id, floor, call_time):
+    # Generate occupancy data for 5 minutes before the call
+    for minutes in range(-5, 1):
+        timestamp = call_time + timedelta(minutes=minutes)
+        hour = timestamp.hour
+        
+        # Use same logic as main occupancy generation
+        if 8 <= hour < 18:
+            actual_occupancy = random.randint(5, 20)  # Busy hours
+        else:
+            actual_occupancy = random.randint(0, 5)   # Off hours
+            
+        occupancy = FloorOccupancy(
+            building_id=building_id,
+            floor=floor,
+            occupancy_count=actual_occupancy,
+            timestamp=timestamp
+        )
+        db.session.add(occupancy)
 
 def wait_for_db(retries=5, delay=2):
     for _ in range(retries):
